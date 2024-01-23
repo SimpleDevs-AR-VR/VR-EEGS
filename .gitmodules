@@ -1,0 +1,3 @@
+[submodule "Meta-Quest-Pro-SCRCPY"]
+	path = Meta-Quest-Pro-SCRCPY
+	url = git@github.com:SimpleDevs-AR-VR/Meta-Quest-Pro-SCRCPY.git
