@@ -8,28 +8,10 @@ This repository contains code necessary to parse BCI data from VR users and visu
 
 |Topic or Endeavor|Description|Relevant Folder(s)|
 |:--|:--|:-:|
-|Meta Quest Pro Data Collection|Capture the screen recording directly from the Meta Quest Pro.|`Meta-Quest-Pro-SCRCPY/`|
-|Meta Quest Pro Footage Pre-Processing|Pre-process the screen recording captured from the Meta Quest Pro by using `crop` and `lenscorrection` filters provided by **ffmpeg**.|`Meta-Quest-Pro-LensCorrection/`|
+|Meta Quest Pro Data Collection|Capture the screen recording directly from the Meta Quest Pro.|[GITHUB REPOSITORY](https://github.com/SimpleDevs-AR-VR/Meta-Quest-Pro-SCRCPY.git)|
+|Meta Quest Pro Footage Pre-Processing|Pre-process the screen recording captured from the Meta Quest Pro by using `crop` and `lenscorrection` filters provided by **ffmpeg**.|[GITHUB REPOSITORY](https://github.com/SimpleDevs-AR-VR/Meta-Quest-Pro-LensCorrection.git)|
 |EEG Data Collection|Collect EEG data captured by the **Muse 2** BCI headset.|`EEG-Collection`|
-|EEG Data Processing|Once data from our BCI headset is collected as raw `.csv` data, this data must be processed by filtering out extraneous frequencies, removing noise, etc.|`processing/`| 
-
-## Quick Installation
-
-This repository uses many submodules. To ensure that you have the latest version of each submodule, make sure to [perform the following commands](https://stackoverflow.com/questions/11358082/empty-git-submodule-folder-when-repo-cloned):
-
-**If cloning the repository from scratch**:
-
-````bash
-git clone https://github.com/SimpleDevs-AR-VR/VR-EEGS.git --recursive
-````
-
-**If you forgot to add the `--recursive` flag when cloning, you can still install submodules after the fact via the following command (do note the additional `--recursive` flag provided here too)**:
-
-````bash
-git submodule update --init --recursive
-````
-
-If you cannot access these submodules, please contact Ryan Kim for permission accessibility.
+|EEG Data Processing|Once data from our BCI headset is collected as raw `.csv` data, this data must be processed by filtering out extraneous frequencies, removing noise, etc.|`processing/`|
 
 ## Team
 
