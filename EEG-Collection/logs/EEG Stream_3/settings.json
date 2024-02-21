@@ -1,0 +1,7 @@
+{
+    "name": "EEG Stream",
+    "epoch_size": 2.0,
+    "stream_start": 1706553349.0,
+    "stream_end": 1706553403.0,
+    "stream_duration": 54.0
+}

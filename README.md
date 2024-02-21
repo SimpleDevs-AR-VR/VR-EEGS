@@ -28,6 +28,7 @@ The steps to process this footage is as follows:
 |4      |Eye Cursor Estimation      |We have a world-to-screenpoint estimation of the eye cursor from the VR app. We need to map that back to the footage, since we corrected the footage afterwards and the footage itself is not correctly rotated to begin with.|[LENS CORRECTION - GITHUB REPO](https://github.com/SimpleDevs-AR-VR/Meta-Quest-Pro-LensCorrection.git)|
 |5      |Object Tracking            |The corrected footage must be processed further by detecting which objects are present in the footage|[OBJECT TRACKING - GITHUB REPO](https://github.com/SimpleDevs-AR-VR/Meta-Quest-Pro-ObjectTracking.git)|
 
+
 ## Team
 
 * **Ryan Kim**: rk2546 [at] nyu.edu
