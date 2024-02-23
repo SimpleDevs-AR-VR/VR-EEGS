@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import os
 import csv
+import matplotlib.pyplot as plt
 
 def EstimateCursor(
         source_filepath, 
@@ -26,7 +27,7 @@ def EstimateCursor(
 
     # Read the events data
     events_df = pd.read_csv(events_filepath)
-    events_start = events_df.iloc[0]['unix_ms']
+    events_start = events_df.iloc[1]['unix_ms']
     print(events_start)
     eye_df = events_df[
         (events_df['event_type'] == 'Eye Tracking') 
@@ -34,7 +35,6 @@ def EstimateCursor(
         & (events_df['title'] == 'Left')
     ]
     eye_df['unix_rel'] = eye_df['unix_ms'].apply(lambda x: (x-events_start)/1000)
-    print(eye_df.head(20))
 
     # Read the frame timestamps data
     # note that all the timestamps are in seconds here. Hence the /1000 division above
@@ -70,7 +70,7 @@ def EstimateCursor(
                 result = np.copy(frame)
                 #result = cv2.drawMarker(result, [int(img_center[0]),int(img_center[1])], (0,255,255), cv2.MARKER_CROSS, 20, 2)
                 # print("for frame : " + str(frame_no) + "   timestamp is: ", str(cap.get(cv2.CAP_PROP_POS_MSEC)))
-                print(f'{prev_timestamp} - {frame_ts}')
+                #print(f'{prev_timestamp} - {frame_ts}')
                 eye_positions = eye_df[(eye_df['unix_rel'] >= prev_timestamp) & (eye_df['unix_rel'] < frame_ts)]
                 if not eye_positions.empty:
                     ep = eye_positions.loc[eye_positions.index[0]]
@@ -89,6 +89,43 @@ def EstimateCursor(
     out.release()
 
     return out_vidpath, out_csvpath
+
+def EstimateDepth(
+        root,
+        left_filename, 
+        right_filename  
+            ):
+    left_filepath = os.path.join(root, left_filename)
+    right_filepath = os.path.join(root, right_filename)
+    out_vidpath = os.path.join(root, f'depth.avi')
+    print(left_filepath, right_filepath)
+
+    cap_left = cv2.VideoCapture(left_filepath)
+    cap_right = cv2.VideoCapture(right_filepath)
+
+    capw  = int(cap_left.get(cv2.CAP_PROP_FRAME_WIDTH))   # float `width`
+    caph = int(cap_left.get(cv2.CAP_PROP_FRAME_HEIGHT))   # float `height`
+    capfps = int(cap_left.get(cv2.CAP_PROP_FPS))          # FPS
+    out = cv2.VideoWriter(out_vidpath, cv2.VideoWriter_fourcc('M','J','P','G'), capfps, (capw,caph))
+    stereo = cv2.StereoBM_create(numDisparities=16, blockSize=15)
+
+    while(True):
+        ls, lframe = cap_left.read()
+        rs, rframe = cap_right.read()
+        if ls and rs:
+            lfgray = cv2.cvtColor(lframe, cv2.COLOR_BGR2GRAY)
+            rfgray = cv2.cvtColor(rframe, cv2.COLOR_BGR2GRAY)
+            disparity = stereo.compute(lfgray,rfgray)
+            out.write(disparity)
+        else:
+            break
+
+    cap_left.release()
+    cap_right.release()
+    out.release()
+
+    return out_vidpath
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

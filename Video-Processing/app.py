@@ -21,7 +21,7 @@ def ms_to_hours(millis, include_millis=True):
     return f"{hours}:{minutes}:{seconds}"
 
 
-def ProcessFootage(root, camera, mappings, vr_events, camera_start_ms, verbose=True):
+def ProcessFootage(root, camera, mappings, vr_events, camera_start_ms, force_overwrite=False, verbose=True):
 
     # Step 1: Build relative URLs for each of the necessary files
     camera_path = os.path.join(root, camera)
@@ -34,36 +34,45 @@ def ProcessFootage(root, camera, mappings, vr_events, camera_start_ms, verbose=T
     # To calculate the start, we perform: simulation_start - camera_start_ms
     # We get `simulation_start` from `vr_events.csv` - the first row value
     events_df = pd.read_csv(vr_events_path)
-    #simulation_start_row = events_df[(events_df['event_type'] == 'Simulation') & (events_df['title'] == 'Trial 1 Start')]
-    #simulation_start = simulation_start_row['unix_ms'].iloc[0]
     simulation_start = events_df.iloc[0]['unix_ms']
     simulation_end = events_df.iloc[-1]['unix_ms']
-    #trim_start_ms = ms_to_hours(simulation_start - camera_start_ms)
-    #trim_end_ms = ms_to_hours(simulation_end - camera_start_ms)
     trim_start_ms = (simulation_start - camera_start_ms)/1000
     trim_end_ms = (simulation_end - camera_start_ms)/1000
-    trim_duration = trim_end_ms - trim_start_ms
+    print(trim_start_ms, ' - ', trim_end_ms)
     trim_path = os.path.join(root, f'trim{camera_ext}')
-    #cmd_str = f'ffmpeg -i {camera_path} -c copy -ss {trim_start_ms} -to {trim_end_ms} {trim_path}'
-    cmd_str = f'ffmpeg -i {camera_path} -vf "trim={trim_start_ms}:{trim_end_ms}" -af "atrim=start={trim_start_ms}:{trim_end_ms}" -vsync 2 {trim_path}'
-    _ = subprocess.check_output(cmd_str, shell=True)
+    #cmd_str = f'ffmpeg -i {camera_path} -vf "trim=start={trim_start_ms}:end={trim_end_ms},setpts=PTS-STARTPTS" -af "atrim=start={trim_start_ms}:end={trim_end_ms},setpts=PTS-STARTPTS" -vsync 2 {trim_path}'
+    if not os.path.exists(trim_path) or force_overwrite:
+        cmd_str = f'ffmpeg -i {camera_path} -vf "trim=start={trim_start_ms}:end={trim_end_ms},setpts=PTS-STARTPTS" -an -vsync 2 {trim_path}'
+        _ = subprocess.check_output(cmd_str, shell=True)
 
     # Step 3: Extract the timestamps and save them
-    timestamps_path = ExtractTimestamps(trim_path, True, verbose)
+    timestamps_path = ExtractTimestamps(trim_path, 0.0, True, verbose)
 
     # Step 4: Correct the footage
-    # We'll get the left eye for this one
-    # We'll be performing cropping, rotatingm, and lens correction via Hugin's method
+    # We'll get both left and right eyes for this one
+    # We'll be performing cropping, rotating, and lens correction via Hugin's method
     left_path = os.path.join(root, f'left{camera_ext}')
-    #cmd_str = f'ffmpeg -i {trim_path} -vf "crop=632:672:16:0,rotate=21*(PI/180),lenscorrection=cx=0.57:cy=0.51:k1=-0.48:k2=0.2" -vsync 2 {left_path}'
-    #_ = subprocess.check_output(cmd_str, shell=True)
-    corrected_timestamps_path = ExtractTimestamps(left_path, True, verbose)
+    if not os.path.exists(left_path) or force_overwrite:
+        cmd_str = f'ffmpeg -i {trim_path} -vf "crop=632:672:16:0,rotate=21*(PI/180),lenscorrection=cx=0.57:cy=0.51:k1=-0.48:k2=0.2" -vsync 2 {left_path}'
+        _ = subprocess.check_output(cmd_str, shell=True)
+    left_eye_timestamps_path = ExtractTimestamps(left_path, 0.0, True, verbose)
+    right_path = os.path.join(root, f'right{camera_ext}')
+    if not os.path.exists(right_path) or force_overwrite:
+        cmd_str = f'ffmpeg -i {trim_path} -vf "crop=632:672:648:0,rotate=-21*(PI/180),lenscorrection=cx=0.43:cy=0.51:k1=-0.48:k2=0.2" -vsync 2 {right_path}'
+        _ = subprocess.check_output(cmd_str, shell=True)
+    right_eye_timestamps_path = ExtractTimestamps(left_path, 0.0, True, verbose)
 
-    # Step 4: eye cursor estimation
+    # Step 5: eye cursor estimation and depth
     # For each frame, we need to estimate what the position of the eye might be
-    # We'll use `EstimateEyeCusor` for this
+    # We'll use `EstimateEyeCusor` and only the left eye for this
     cursor_vidpath, cursor_csvpath = EstimateCursor(left_path, vr_events_path, mappings_path, timestamps_path)
-    cursor_timestamps_path = ExtractTimestamps(cursor_vidpath, True, verbose)
+    cursor_timestamps_path = ExtractTimestamps(cursor_vidpath, 0.0, True, verbose)
+
+    # Sttep 6: object detection
+    # we need to execute object detection on this.
+    # We might go with YOLOV5 as our object detection. However, I want to also employ deepsort as a method to see if we can stabilize the object tracking
+    
+    
 
     
 
@@ -76,6 +85,7 @@ if __name__ == "__main__":
     
     parser.add_argument("camera_start_ms", help="The start time (unix milliseconds) of when the camera feed was recorded. AKA at what unix millisecond was the camera footage started at?", type=int)
     #parser.add_argument("camera_sim_start", help="The time (in seconds) when the Unity logo first appears at the start of the simulation.")
+    parser.add_argument('-f', '--force', help="Force the creation of videos regardless if they exist or not", action="store_true")
     parser.add_argument('-v', '--verbose', help="Should we be verbose in printing out statements?", action="store_true")
     args = parser.parse_args()
 
@@ -86,7 +96,8 @@ if __name__ == "__main__":
         args.camera, 
         args.mappings, 
         args.vr_events, 
-        args.camera_start_ms, 
+        args.camera_start_ms,
+        args.force,
         args.verbose
             )
 
