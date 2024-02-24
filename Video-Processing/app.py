@@ -6,6 +6,7 @@ import datetime
 
 from ExtractFrameTimestamps import ExtractTimestamps
 from EstimateEyeCursor import EstimateCursor
+from predict_deepsort import ObjectDetection, check_cuda_available
 
 def ms_to_hours(millis, include_millis=True):
     seconds, milliseconds = divmod(millis, 1000)
@@ -21,7 +22,7 @@ def ms_to_hours(millis, include_millis=True):
     return f"{hours}:{minutes}:{seconds}"
 
 
-def ProcessFootage(root, camera, mappings, vr_events, camera_start_ms, force_overwrite=False, verbose=True):
+def ProcessFootage(root, camera, mappings, vr_events, camera_start_ms, objdet_model, force_overwrite=False, verbose=True):
 
     # Step 1: Build relative URLs for each of the necessary files
     camera_path = os.path.join(root, camera)
@@ -71,9 +72,10 @@ def ProcessFootage(root, camera, mappings, vr_events, camera_start_ms, force_ove
     # Sttep 6: object detection
     # we need to execute object detection on this.
     # We might go with YOLOV5 as our object detection. However, I want to also employ deepsort as a method to see if we can stabilize the object tracking
-    
-    
-
+    gpu_available = check_cuda_available()
+    deepsort_detector = ObjectDetection(objdet_model)
+    objdet_path, objdet_vidpath = deepsort_detector(left_path, os.path.join(root,'deepsort_results'), gpu_available)
+    objdet_timestamps_path = ExtractTimestamps(objdet_vidpath, 0.0, True, verbose)
     
 
 if __name__ == "__main__":
@@ -84,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument("vr_events", help="The filename of the csv file that stores the events captured from the VR simulation app.")
     
     parser.add_argument("camera_start_ms", help="The start time (unix milliseconds) of when the camera feed was recorded. AKA at what unix millisecond was the camera footage started at?", type=int)
-    #parser.add_argument("camera_sim_start", help="The time (in seconds) when the Unity logo first appears at the start of the simulation.")
+    parser.add_argument("model", help="What model should we use for the YOLO implmenetation and object detection/tracking?")
     parser.add_argument('-f', '--force', help="Force the creation of videos regardless if they exist or not", action="store_true")
     parser.add_argument('-v', '--verbose', help="Should we be verbose in printing out statements?", action="store_true")
     args = parser.parse_args()
@@ -97,6 +99,7 @@ if __name__ == "__main__":
         args.mappings, 
         args.vr_events, 
         args.camera_start_ms,
+        args.model,
         args.force,
         args.verbose
             )
