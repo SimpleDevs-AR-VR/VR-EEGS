@@ -6,6 +6,7 @@ import pandas as pd
 import math
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import torch
+from query_yes_no import query_yes_no
 
 def check_cuda_available():
     return torch.cuda.is_available()
@@ -66,7 +67,7 @@ class ObjectDetection():
             active_tracks.append(df)
         return frame, active_tracks
     
-    def __call__(self, src, output_dir, use_gpu=False, preview=False):
+    def __call__(self, src, output_dir, use_gpu=False, preview=False, force_overwrite=False):
         tracker = DeepSort(max_age=5,
                            n_init=2,
                            nms_max_overlap=1.0,
@@ -87,33 +88,38 @@ class ObjectDetection():
         fps = cap.get(cv2.CAP_PROP_FPS)
         h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
         w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-
-        if not os.path.exists(output_dir): os.makedirs(output_dir)
+        
         output_vidpath = os.path.join(output_dir,'deepsort_predict.avi')
-        output_vid = cv2.VideoWriter(output_vidpath, cv2.VideoWriter_fourcc(*'MJPG'),fps,(int(w),int(h)))
-        track_history = []
+        output_filepath = os.path.join(output_dir,"deepsort_tracks.csv")
+        produce_video = (force_overwrite or not os.path.exists(output_vidpath) or query_yes_no(f"The file \"{output_vidpath}\" already exists. Do you wish to overwrite it?", default=None))
+        produce_csv = (force_overwrite or not os.path.exists(output_filepath) or query_yes_no(f"The file \"{output_filepath}\" already exists. Do you wish to overwrite it?", default=None))
+        if not (produce_video or produce_csv):
+            print("Opted out of producing deepsort calcualtions. Ending early.")
+            return output_filepath, output_vidpath
+        
+        if not os.path.exists(output_dir): os.makedirs(output_dir)
+        if produce_video: output_vid = cv2.VideoWriter(output_vidpath, cv2.VideoWriter_fourcc(*'MJPG'),fps,(int(w),int(h)))
+        if produce_csv: track_history = []
         frame_counter = -1
 
         while True:
             success, frame = cap.read()
             if not success: break
             frame_counter += 1
-            if frame_counter % 100 == 0: print(f'CURRENT_FRAME: {frame_counter}')
             results = self.predict(frame, use_gpu)
             detections, _frame = self.plot_boxes(results, frame)
             detect_frame, detect_tracks = self.track_detect(detections, _frame, tracker, frame_counter)
-            track_history.extend(detect_tracks)
-            output_vid.write(detect_frame)
+            if produce_csv: track_history.extend(detect_tracks)
+            if produce_video: output_vid.write(detect_frame)
             if preview: cv2.imshow('Image', detect_frame)
             #if cv2.waitKey(1) == ord('q'): break
 
         cap.release()
-        output_vid.release()
+        if produce_video: output_vid.release()
         if preview: cv2.destroyAllWindows()
-
-        df = pd.concat(track_history)
-        output_filepath = os.path.join(output_dir,"deepsort_tracks.csv")
-        df.to_csv(output_filepath, index=False)
+        if produce_csv:
+            df = pd.concat(track_history)
+            df.to_csv(output_filepath, index=False)
 
         return output_filepath, output_vidpath
 
