@@ -13,6 +13,8 @@ def EstimateCursor(
         events_filepath, 
         mapping_filepath, 
         frame_timestamps_filepath,
+        start_timestamp=None,
+        end_timestamp=None,
         force_overwrite=False
             ):
     # Note: `sim_start_ts` is expected to be in unix seconds
@@ -35,13 +37,14 @@ def EstimateCursor(
     === Step 3: Read the events data ===
     ================================ """
     events_df = pd.read_csv(events_filepath)
-    events_start = events_df.iloc[1]['unix_ms']
-    print(events_start)
     eye_df = events_df[
         (events_df['event_type'] == 'Eye Tracking') 
         & (events_df['description'] == 'Screen Position')
         & (events_df['title'] == 'Left')
     ]
+    if start_timestamp is not None: eye_df = eye_df[eye_df['unix_ms'] >= start_timestamp]
+    if end_timestamp is not None: eye_df = eye_df[eye_df['unix_ms'] <= end_timestamp]
+    events_start = start_timestamp if start_timestamp is not None else events_df.iloc[1]['unix_ms']
     eye_df['unix_rel'] = eye_df['unix_ms'].apply(lambda x: (x-events_start)/1000)
 
     """ ==========================================

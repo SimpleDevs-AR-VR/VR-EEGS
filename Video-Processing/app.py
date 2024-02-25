@@ -1,8 +1,11 @@
 import os
+import numpy as np
 import subprocess
 import argparse
 import pandas as pd
 import datetime
+import mne
+from scipy.signal import find_peaks
 
 from ExtractFrameTimestamps import ExtractTimestamps
 from EstimateEyeCursor import EstimateCursor
@@ -42,15 +45,21 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     eeg_path = os.path.join(root, eeg)
 
     """ ===================================
-    === Step 2: Trip the camera footage ===
+    === Step 2: Trim the camera footage ===
     =======================================
     How to trim: we need the starting position (in hh:mm:ss.milli) and the end (in hh:mm:ss.milli)
     To calculate the start, we perform: simulation_start - camera_start_ms
-    We get `simulation_start` from `vr_events.csv` - the first row value """
+    The choice in `simulation_start` is up to us. To avoid noise, let's trim so that
+    we get all the data starting from the 2nd trial. The first trial started inside, after all. """
     events_df = pd.read_csv(vr_events_path)
-    start_timestamp = events_df.iloc[0]['unix_ms']
-    end_timestamp = events_df.iloc[-1]['unix_ms']
-    print(start_timestamp)
+    #start_timestamp = events_df.iloc[0]['unix_ms']
+    #end_timestamp = events_df.iloc[-1]['unix_ms']
+    trial_rows = events_df[events_df['title'].str.contains('Trial', regex=True, na=False)]
+    start_timestamp = trial_rows.iloc[1]['unix_ms']
+    end_timestamp = trial_rows.iloc[-2]['unix_ms']
+    if end_timestamp <= start_timestamp:
+        print("ERROR: The 2nd-to-last trial and the 2nd trial overlap or are the same. There's not enough data to handle. This user's data cannot be used.")
+        return None
     trim_start_ms = (start_timestamp - camera_start_ms)/1000
     trim_end_ms = (end_timestamp - camera_start_ms)/1000
     trim_path = os.path.join(root, f'trim{camera_ext}')
@@ -95,11 +104,13 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     For each frame, we need to estimate what the position of the eye might be
     We'll use `EstimateEyeCusor` and only the left eye for this """
     cursor_vidpath, cursor_csvpath = EstimateCursor(
-        left_path, 
+        objdet_vidpath, 
         vr_events_path, 
         mappings_path, 
         timestamps_path,
-        force_overwrite
+        start_timestamp=start_timestamp,
+        end_timestamp=end_timestamp,
+        force_overwrite=force_overwrite
             )
     cursor_timestamps_path = ExtractTimestamps(cursor_vidpath, 0.0, True, verbose)
     
@@ -110,12 +121,68 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     eeg_df = pd.read_csv(eeg_path)
     eeg_df.rename(columns={'ch1':'TP9', 'ch2':'AF7', 'ch3':'AF8', 'ch4':'TP10', 'ch5':'AUX'}, inplace=True)
     eeg_df = eeg_df.drop_duplicates()
-    print(start_timestamp_sec, eeg_df.iloc[0]['unix_ts'], start_timestamp_sec-eeg_df.iloc[0]['unix_ts'])
     eeg_df = eeg_df[(eeg_df['unix_ts'] >= start_timestamp_sec) & (eeg_df['unix_ts'] <= (end_timestamp/1000))]
     eeg_df['unix_rel_ts'] = eeg_df['unix_ts'] - start_timestamp_sec
-    print(eeg_df.head())
-    print(eeg_df.tail())
-    print(len(eeg_df.index))
+    eeg_df.to_csv(os.path.join(root,'eeg_trimmed.csv'), index=False)
+    
+    """ =============================================
+    === Step 8: Process EEG data into mne package ===
+    ============================================= """
+    eeg_start = eeg_df.iloc[0]['unix_ts']
+    eeg_end = eeg_df.iloc[-1]['unix_ts']
+    eeg_duration = eeg_end - eeg_start
+    eeg_size = len(eeg_df.index)
+    eeg_frequency = round(eeg_size / eeg_duration)
+    eeg_info = mne.create_info(["TP9","TP10","AF7", "AF8"], eeg_frequency, ch_types='eeg', verbose=False)
+    s_array = np.transpose(eeg_df[["TP9", "TP10", "AF7", "AF8"]].to_numpy())
+    mne_info = mne.io.RawArray(s_array, eeg_info, first_samp=0, copy='auto', verbose=False)
+    mne_info.filter(0, 100, verbose=False)
+    print('eeg_start: ' + str(eeg_start))
+    print('eeg_end: ' + str(eeg_end))
+    print('eeg_duration: ' + str(eeg_duration))
+
+    """ ======================================
+    === Step 9: Parsing EEG frame-by-frame ===
+    ==========================================
+    Here, we will attempt to parse the EEG at each known frame.
+    The frame timings will be designated at each frame timestamp.
+    The choice of sliding window size (in time) is a difficult choice.
+    We'll go with a timestamp of a 2-sec timestamp. That should theoretically balance the temporal and spatial resolution of the PSD.
+    We'll include samples from only AFTER the current timestamp. While having samples from both before and after the timestamp...
+    ... might provide temporal context, we're more interested in the rapid changes in EEG signals. So the temporal context is not...
+    ... going to be very useful. We'll still ahve the signal data on record for each frame anyway :shrug. """
+    frequencies=["delta","theta","alpha","beta","gamma"]
+    frequency_bands = {
+        "delta": {"range":(0.5,4),"color":"darkgray"},
+        "theta": {"range":(4, 8),"color":"lightblue"},
+        "alpha": {"range":(8, 16),"color":"blue"},
+        "beta":  {"range":(16, 32),"color":"orange"},
+        "gamma": {"range":(32, 80),"color":"red"}
+    }
+    frame_timestamps = pd.read_csv(timestamps_path)
+    frame_timestamps_list = frame_timestamps['timestamp'].to_list()
+    for eeg_start in frame_timestamps_list:
+        eeg_end = eeg_start + 2.0
+        if eeg_end > frame_timestamps_list[-1]: break
+        psd = mne_info.compute_psd(tmin=eeg_start, tmax=eeg_end, average='mean', verbose=False)
+        powers, freqs = psd.get_data(picks=["AF7", "AF8"], return_freqs=True)
+        peak_freqs = {}
+        peak_powers = {}
+        for freq in frequencies:
+            peak_freqs[freq] = []
+            peak_powers[freq] = []
+        if len(powers) > 0:
+            for i in range(len(["AF7", "AF8"])):
+                peaks, _ = find_peaks(powers[i], threshold=50)
+                for peak in peaks:
+                    peak_freq = freqs[peak]
+                    peak_power = powers[i][peak]
+                    for freq in frequencies:
+                        if peak_freq >= frequency_bands[freq]["range"][0] and peak_freq < frequency_bands[freq]["range"][1]:
+                            peak_freqs[freq].append(peak_freq)
+                            peak_powers[freq].append(peak_power)
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

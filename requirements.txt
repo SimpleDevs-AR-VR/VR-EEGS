@@ -6,3 +6,4 @@ pyyaml
 ultralytics
 deep-sort-realtime
 cvzone
+mne
