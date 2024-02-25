@@ -6,6 +6,10 @@ import pandas as pd
 import datetime
 import mne
 from scipy.signal import find_peaks
+import matplotlib.pyplot as plt
+import re
+import shutil
+import cv2
 
 from ExtractFrameTimestamps import ExtractTimestamps
 from EstimateEyeCursor import EstimateCursor
@@ -31,6 +35,47 @@ def query_cmd(cmd_str, output_path, force_overwrite=False):
     elif query_yes_no(f"The file \"{output_path}\" already exists. Do you wish to overwrite?", default=None):
                                             _ = subprocess.check_output(cmd_str, shell=True)
     else:                                   print(f"\tDid not generate a new \"{output_path}\"")
+
+def thresholding_algo(y, lag, threshold, influence):
+    signals = np.zeros(len(y))
+    filteredY = np.array(y)
+    avgFilter = [0]*len(y)
+    stdFilter = [0]*len(y)
+    avgFilter[lag - 1] = np.mean(y[0:lag])
+    stdFilter[lag - 1] = np.std(y[0:lag])
+    for i in range(lag, len(y)):
+        if abs(y[i] - avgFilter[i-1]) > threshold * stdFilter [i-1]:
+            if y[i] > avgFilter[i-1]:
+                signals[i] = 1
+            else:
+                signals[i] = -1
+
+            filteredY[i] = influence * y[i] + (1 - influence) * filteredY[i-1]
+            avgFilter[i] = np.mean(filteredY[(i-lag+1):i+1])
+            stdFilter[i] = np.std(filteredY[(i-lag+1):i+1])
+        else:
+            signals[i] = 0
+            filteredY[i] = y[i]
+            avgFilter[i] = np.mean(filteredY[(i-lag+1):i+1])
+            stdFilter[i] = np.std(filteredY[(i-lag+1):i+1])
+
+    return dict(signals = np.asarray(signals),
+                avgFilter = np.asarray(avgFilter),
+                stdFilter = np.asarray(stdFilter))
+
+# These three functions sort filenames "humanly" (as opposed to the default lexicographical sorting that computers understand)
+# The user-friendly function to use is `sort_nicely(l)`, where `l` is a list of files where all contents are of type ____<#>.png
+# Source: https://nedbatchelder.com/blog/200712/human_sorting.html
+def tryint(s):
+    try:
+        return int(s)
+    except:
+        return s
+def alphanum_key(s):
+    """ Turn a string into a list of string and number chunks. "z23a" -> ["z", 23, "a"] """
+    return [ tryint(c) for c in re.split('([0-9]+)', s) ]
+def sort_nicely(l):
+   return sorted(l, key=alphanum_key) 
 
 def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objdet_model, force_overwrite=False, verbose=True):
 
@@ -151,6 +196,12 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     We'll include samples from only AFTER the current timestamp. While having samples from both before and after the timestamp...
     ... might provide temporal context, we're more interested in the rapid changes in EEG signals. So the temporal context is not...
     ... going to be very useful. We'll still ahve the signal data on record for each frame anyway :shrug. """
+    
+    fig, ax = plt.subplots(1,1,figsize=(10,4))
+
+    psd_filedir = os.path.join(root, 'temp_psd_frames')
+    if not os.path.exists(psd_filedir): os.makedirs(psd_filedir)
+    
     frequencies=["delta","theta","alpha","beta","gamma"]
     frequency_bands = {
         "delta": {"range":(0.5,4),"color":"darkgray"},
@@ -161,28 +212,65 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     }
     frame_timestamps = pd.read_csv(timestamps_path)
     frame_timestamps_list = frame_timestamps['timestamp'].to_list()
-    for eeg_start in frame_timestamps_list:
-        eeg_end = eeg_start + 2.0
-        if eeg_end > frame_timestamps_list[-1]: break
-        psd = mne_info.compute_psd(tmin=eeg_start, tmax=eeg_end, average='mean', verbose=False)
+    for eeg_current_start in frame_timestamps_list:
+        eeg_current_end = eeg_current_start + 2.0
+        if eeg_current_end > frame_timestamps_list[-1]: break
+        psd = mne_info.compute_psd(
+            tmin=eeg_current_start, 
+            tmax=eeg_current_end, 
+            average='mean', 
+            fmin=0.5,
+            fmax=60,
+            verbose=False)
         powers, freqs = psd.get_data(picks=["AF7", "AF8"], return_freqs=True)
+        # Note: freqs is the same size as the 2D layer of `powers`. `powers`' first dimension is for each frequency channel
+        # To process, we need to look at the 2nd layer of `powers` when mapping frequencies to powers
         peak_freqs = {}
         peak_powers = {}
+        # frequencies = ["delta", "theta", "alpha", "beta", "gamma"]
         for freq in frequencies:
             peak_freqs[freq] = []
             peak_powers[freq] = []
         if len(powers) > 0:
-            for i in range(len(["AF7", "AF8"])):
-                peaks, _ = find_peaks(powers[i], threshold=50)
-                for peak in peaks:
-                    peak_freq = freqs[peak]
-                    peak_power = powers[i][peak]
-                    for freq in frequencies:
-                        if peak_freq >= frequency_bands[freq]["range"][0] and peak_freq < frequency_bands[freq]["range"][1]:
-                            peak_freqs[freq].append(peak_freq)
-                            peak_powers[freq].append(peak_power)
-
-
+            # get through 1st layer of `powers`
+            powers_avg = np.mean(powers, axis=0)
+            peaks = thresholding_algo(powers_avg, 5, 3.5, 0.5)
+            ax.cla()
+            plt.title("Power Spectral Density\n[dt: 2]")
+            ax.set_ylim([0.0, 200.0])
+            ax.set_xlabel("Frequency (Hz)")
+            ax.set_ylabel("Power (Decibels)")
+            for f in frequencies:
+                plt.axvspan(frequency_bands[f]["range"][0], frequency_bands[f]["range"][1], color=frequency_bands[f]["color"], alpha=0.1)
+            plt.plot(freqs, powers_avg, label='psd', c='b')
+            plt.plot(freqs, peaks['signals'], label='peaks', c='r')
+            psd_filepath = os.path.join(psd_filedir, f'frame_{eeg_current_start}.png')
+            plt.savefig(psd_filepath, bbox_inches="tight")
+    print("Generating video from frames...")
+    # Grab all frames in our temp folder. Sort them humanly.
+    frames_raw = [img for img in os.listdir(psd_filedir) if img.endswith(".png")]
+    frames = sort_nicely(frames_raw)
+    # We'll get the first frame and temporarily use it to determine the 
+    frame = cv2.imread(os.path.join(psd_filedir, frames[0]))
+    height, width, layers = frame.shape
+    # We'll also calcualte the FPS from our `dt`
+    video_fps = 60
+    # Initialize the video writer
+    psd_videopath = os.path.join(root, 'psd.avi')
+    video = cv2.VideoWriter(psd_videopath, cv2.VideoWriter_fourcc(*"MJPG"), video_fps, (width, height))
+    # Iterate throgh our frames
+    try:
+        for i in range(len(frames)):
+            image = frames[i]
+            video.write(cv2.imread(os.path.join(psd_filedir, image)))
+    except:
+        print("[ERROR] Something went wrong while processing the video. Ending early")
+    # Release the video writer
+    video.release()
+    print("Video generated. Now deleting extraneous frames from temp folder")
+    shutil.rmtree(psd_filedir)
+    print("Video finished generating!")
+    plt.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
