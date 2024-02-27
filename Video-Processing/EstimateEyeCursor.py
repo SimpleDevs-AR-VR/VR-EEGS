@@ -61,22 +61,23 @@ def EstimateCursor(
     out_vidpath = os.path.join(root_dir, f'{out_filename}_eyecursor.avi')
     out_csvpath = os.path.join(root_dir, f'{out_filename}_eycursor.csv')
 
-    produce_video = (force_overwrite or not os.path.exists(out_vidpath) or query_yes_no(f"The file \"{out_vidpath}\" already exists. Do you wish to overwrite it?", default=None))
-    produce_csv = (force_overwrite or not os.path.exists(out_csvpath) or query_yes_no(f"The file \"{out_csvpath}\" already exists. Do you wish to overwrite it?", default=None))
-    if not (produce_video or produce_csv):
-        print("You've opted to not produc any video or CSV file. Ending early.")
-        return out_vidpath, out_csvpath
-
     cap = cv2.VideoCapture(source_filepath)
     capw  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))   # float `width`
     caph = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))   # float `height`
     capfps = int(cap.get(cv2.CAP_PROP_FPS))          # FPS
+
+    produce_video = (force_overwrite or not os.path.exists(out_vidpath) or query_yes_no(f"The file \"{out_vidpath}\" already exists. Do you wish to overwrite it?", default=None))
+    produce_csv = (force_overwrite or not os.path.exists(out_csvpath) or query_yes_no(f"The file \"{out_csvpath}\" already exists. Do you wish to overwrite it?", default=None))
+    if not (produce_video or produce_csv):
+        print("You've opted to not produc any video or CSV file. Ending early.")
+        return out_vidpath, out_csvpath, {"width":capw, "height":caph, "fps":capfps}
+    
     if produce_video:
         out = cv2.VideoWriter(out_vidpath, cv2.VideoWriter_fourcc('M','J','P','G'), capfps, (capw,caph))
 
     if produce_csv:
         fields = ['frame', 'x', 'y']
-        csvfile = open(out_csvpath, 'w')
+        csvfile = open(out_csvpath, 'w', newline='')
         csvwriter = csv.writer(csvfile) 
         csvwriter.writerow(fields) 
 
@@ -109,7 +110,7 @@ def EstimateCursor(
     if produce_video: out.release()
     if produce_csv: csvfile.close()
 
-    return out_vidpath, out_csvpath
+    return out_vidpath, out_csvpath, {"width":capw, "height":caph, "fps":capfps}
 
 def EstimateDepth(
         root,

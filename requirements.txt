@@ -7,3 +7,4 @@ ultralytics
 deep-sort-realtime
 cvzone
 mne
+scikit-learn

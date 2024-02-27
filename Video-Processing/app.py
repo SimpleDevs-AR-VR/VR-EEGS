@@ -6,6 +6,7 @@ import pandas as pd
 import datetime
 import mne
 from scipy.signal import find_peaks
+from sklearn.preprocessing import minmax_scale
 import matplotlib.pyplot as plt
 import re
 import shutil
@@ -79,7 +80,6 @@ def sort_nicely(l):
 
 def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objdet_model, force_overwrite=False, verbose=True):
 
-     
     """ ================================================================
     === Step 1: Build relative URLs for each of the necessary files ====
     ==================================================================== """
@@ -148,7 +148,7 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     ===============================================
     For each frame, we need to estimate what the position of the eye might be
     We'll use `EstimateEyeCusor` and only the left eye for this """
-    cursor_vidpath, cursor_csvpath = EstimateCursor(
+    cursor_vidpath, cursor_csvpath, cursor_vid_details = EstimateCursor(
         objdet_vidpath, 
         vr_events_path, 
         mappings_path, 
@@ -253,11 +253,9 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     # We'll get the first frame and temporarily use it to determine the 
     frame = cv2.imread(os.path.join(psd_filedir, frames[0]))
     height, width, layers = frame.shape
-    # We'll also calcualte the FPS from our `dt`
-    video_fps = 60
     # Initialize the video writer
     psd_videopath = os.path.join(root, 'psd.avi')
-    video = cv2.VideoWriter(psd_videopath, cv2.VideoWriter_fourcc(*"MJPG"), video_fps, (width, height))
+    video = cv2.VideoWriter(psd_videopath, cv2.VideoWriter_fourcc(*"MJPG"), cursor_vid_details['fps'], (width, height))
     # Iterate throgh our frames
     try:
         for i in range(len(frames)):
