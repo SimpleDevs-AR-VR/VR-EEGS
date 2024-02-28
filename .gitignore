@@ -3,5 +3,6 @@
 **/__pycache__/
 **/*_ignore
 venv/
+participant_data/
 sample/
 sample.zip
