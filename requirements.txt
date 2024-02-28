@@ -1,0 +1,10 @@
+opencv-python
+pandas
+moviepy
+matplotlib
+pyyaml
+ultralytics
+deep-sort-realtime
+cvzone
+mne
+scikit-learn

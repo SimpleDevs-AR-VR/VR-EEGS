@@ -1,3 +1,8 @@
 **/.DS_Store
 **/.ipynb_checkpoints
-ARVR-FinalProject-rk2546.zip
+**/__pycache__/
+**/*_ignore
+venv/
+participant_data/
+sample/
+sample.zip
