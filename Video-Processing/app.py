@@ -16,6 +16,7 @@ from ExtractFrameTimestamps import ExtractTimestamps
 from EstimateEyeCursor import EstimateCursor
 from predict_deepsort import ObjectDetection, check_cuda_available
 from query_yes_no import query_yes_no
+from cursorConfidence import cursorConfidence
 
 def ms_to_hours(millis, include_millis=True):
     seconds, milliseconds = divmod(millis, 1000)
@@ -158,6 +159,13 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
         force_overwrite=force_overwrite
             )
     cursor_timestamps_path = ExtractTimestamps(cursor_vidpath, 0.0, True, verbose)
+
+    """ ==============================================================
+    
+    ============================================================== """
+    cursor_confidence_csvpath = cursorConfidence(cursor_csv_path=cursor_csvpath, deepsort_csv_path=objdet_path)
+
+
     
     """ ==============================================================
     === Step 7: Limit the EEG data range based on video start time ===
