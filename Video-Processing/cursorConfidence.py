@@ -2,9 +2,9 @@ import pandas as pd
 import argparse
 import numpy as np
 import math
+import os
 
-def cursorConfidence(cursor_csv_path, deepsort_csv_path):
-    file_path = 'sample/deepsort_cursorConfidence.csv'
+def cursorConfidence(cursor_csv_path, deepsort_csv_path, output_path):
 
     confidence = {'frame_id' : [], 
                   'track_id' : [],
@@ -48,10 +48,10 @@ def cursorConfidence(cursor_csv_path, deepsort_csv_path):
             confidence['h'].append(row['h'])
 
     df = pd.DataFrame(confidence)
-    df.to_csv(file_path, index=False)
+    df.to_csv(output_path, index=False)
     print('finished')
 
-    return file_path
+    return output_path
 
 def Confidence(cursor_x, cursor_y, bounding_x1, bounding_y1, w, h):
     bottom_right = np.array([632,672])
@@ -77,4 +77,4 @@ if __name__ == "__main__":
     parser.add_argument('deepsort',help='Deepsort Tracks csv file')
     args = parser.parse_args() """
 
-    cursorConfidence('sample/deepsort_predict_eycursor.csv', 'sample/deepsort_tracks.csv')
+    cursorConfidence('sample/deepsort_predict_eycursor.csv', 'sample/deepsort_tracks.csv', 'sample/deepsort_cursorConfidence.csv')
