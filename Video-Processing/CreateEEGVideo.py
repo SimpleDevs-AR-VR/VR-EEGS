@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import numpy as np
+import argparse
 import matplotlib.pyplot as plt
 import cv2
 import pandas as pd
@@ -52,7 +53,7 @@ def thresholding_algo(y, lag, threshold, influence):
 def CreateEEGVideo(eeg_path, output_dir, start_timestamp, end_timestamp, timestamps_path, fps=60, verbose=True):
 
     output_trimmed_csv = os.path.join(output_dir,'eeg_trimmed.csv')
-    psd_videopath = os.path.join(root, 'psd.avi')
+    psd_videopath = os.path.join(output_dir, 'psd.avi')
 
     """ ==============================================================
     === Step 7: Limit the EEG data range based on video start time ===
@@ -171,3 +172,9 @@ def CreateEEGVideo(eeg_path, output_dir, start_timestamp, end_timestamp, timesta
     plt.close()
 
     return output_trimmed_csv, psd_videopath
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("eeg", help="The path to the raw EEG data")
+    parser.add_argument("output_dir", help="The directory where we want to save the results in")
+    parser.add_argument("start")
