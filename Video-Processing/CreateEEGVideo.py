@@ -58,15 +58,16 @@ def CreateEEGVideo(
         display_xlims = [0.5,80],
         display_ylims = [0,200],
         fps=60, 
-        output_csvname="eeg_trimmed", output_vidname="psd", 
+        output_trimname="eeg_trim", output_vidname="psd", output_psdname="psd",
         verbose=True
             ):
 
     """ ===========================================
     === Step 1: Determine the output file paths ===
     =========================================== """
-    output_trimmed_csv = os.path.join(output_dir,f'{output_csvname}.csv')
+    output_trimmed_csv = os.path.join(output_dir,f'{output_trimname}.csv')
     psd_videopath = os.path.join(output_dir, f'{output_vidname}.avi')
+    psd_csvpath = os.path.join(output_dir, f'{output_psdname}.csv')
 
 
     """ ==========================================
@@ -80,10 +81,8 @@ def CreateEEGVideo(
     """ ======================================================================
     === Step 3: Limit the EEG data range based on video start and end time ===
     ====================================================================== """
-    start_timestamp_sec = start_timestamp/1000
-    end_timestamp_sec = end_timestamp/1000
-    eeg_df = eeg_df[(eeg_df['unix_ts'] >= start_timestamp_sec) & (eeg_df['unix_ts'] <= (end_timestamp_sec))]
-    eeg_df['unix_rel_ts'] = eeg_df['unix_ts'] - start_timestamp_sec
+    eeg_df = eeg_df[(eeg_df['unix_ts'] >= start_timestamp) & (eeg_df['unix_ts'] <= (end_timestamp))]
+    eeg_df['unix_rel_ts'] = eeg_df['unix_ts'] - start_timestamp
 
 
     """ =======================================================
@@ -206,4 +205,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("eeg", help="The path to the raw EEG data")
     parser.add_argument("output_dir", help="The directory where we want to save the results in")
-    parser.add_argument("start", help="The unix start timestamp (milliseconds) where the ")
+    parser.add_argument("start", help="The unix start timestamp (seconds) where we want to restrict the EEG to.")
+    parser.add_argument("end", help="The unix end timestamp (seconds) where we want to restrict the EEG to.")
+    parser.add_argument("-tlf", "--timestamp_list_file", help="The relative path to a csv file that contains which timestamps we want to look at. Only works if `-tc` is set.", default=None)
+    parser.add_argument("-tc", '--timestamp_column', help="If we decide to read timestamps from `-tlf`, what column represents the timestamps? Must be a seconds-based timestamp column. Only works if `-tlf` is set.", default=None)
+    parser.add_argument("-lf", "--l_freq", help="The lower frequency we want to restrict the visualization to.", type=float, default=0.5)
+    parser.add_argument('-hf', '--h_freq', help="The upper frequency we want to restrict the visualization to.", type=float, default=80.0)
+    parser.add_argument("-lp", '--l_power', help="The lower power we want to restrict the visualization to.", type=float, default=0.0)
+    parser.add_argument("-hp", '--h_power', help="The upper power we want to restrict the visualization to.", type=float, default=200.0)
+    parser.add_argument('-fps', '--frames_per_second', help="The frames per second we want to set the video to.", type=float, default=60)
+    parser.add_argument("-ot", '--out_trimname', help="The name (no extension) of the outputted csv file after calculating the PSD for each frame.", default="eeg_trim")
+    parser.add_argument("-ov", '--out_vidname', help="The name (no extension) of the outputted video file", default="psd")
+    parser.add_argument('-op', '--out_psdname', help="")
