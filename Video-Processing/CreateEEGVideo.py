@@ -53,8 +53,7 @@ def thresholding_algo(y, lag, threshold, influence):
 def CreateEEGVideo(
         eeg_path, 
         output_dir, 
-        start_timestamp, end_timestamp, 
-        timestamps_list = None, 
+        start_timestamp, end_timestamp, timestamps_list = None, 
         display_xlims = [0.5,80],
         display_ylims = [0,200],
         fps=60, 
