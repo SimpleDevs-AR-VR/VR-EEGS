@@ -163,7 +163,7 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     """ ==============================================================
     
     ============================================================== """
-    cursor_confidence_csvpath = cursorConfidence(cursor_csv_path=cursor_csvpath, deepsort_csv_path=objdet_path, output_path='sample/deepsort_cursorConfidence.csv')
+    cursor_confidence_csvpath = cursorConfidence(cursor_csv_path=cursor_csvpath, deepsort_csv_path=objdet_path, output_path='sample/deepsort_cursorConfidence.csv', newMetric=False)
 
 
     
