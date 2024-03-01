@@ -189,6 +189,7 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     eeg_info = mne.create_info(["TP9","TP10","AF7", "AF8"], eeg_frequency, ch_types='eeg', verbose=False)
     s_array = np.transpose(eeg_df[["TP9", "TP10", "AF7", "AF8"]].to_numpy())
     mne_info = mne.io.RawArray(s_array, eeg_info, first_samp=0, copy='auto', verbose=False)
+    mne_info.set_eeg_reference(ref_channels=["TP9","TP10"], verbose=False)
     mne_info.filter(0, 100, verbose=False)
     print('eeg_start: ' + str(eeg_start))
     print('eeg_end: ' + str(eeg_end))
@@ -220,40 +221,46 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     }
     frame_timestamps = pd.read_csv(timestamps_path)
     frame_timestamps_list = frame_timestamps['timestamp'].to_list()
-    for eeg_current_start in frame_timestamps_list:
-        eeg_current_end = eeg_current_start + 2.0
-        if eeg_current_end > frame_timestamps_list[-1]: break
-        psd = mne_info.compute_psd(
-            tmin=eeg_current_start, 
-            tmax=eeg_current_end, 
-            average='mean', 
-            fmin=0.5,
-            fmax=60,
-            verbose=False)
-        powers, freqs = psd.get_data(picks=["AF7", "AF8"], return_freqs=True)
-        # Note: freqs is the same size as the 2D layer of `powers`. `powers`' first dimension is for each frequency channel
-        # To process, we need to look at the 2nd layer of `powers` when mapping frequencies to powers
-        peak_freqs = {}
-        peak_powers = {}
-        # frequencies = ["delta", "theta", "alpha", "beta", "gamma"]
-        for freq in frequencies:
-            peak_freqs[freq] = []
-            peak_powers[freq] = []
-        if len(powers) > 0:
-            # get through 1st layer of `powers`
-            powers_avg = np.mean(powers, axis=0)
-            peaks = thresholding_algo(powers_avg, 5, 3.5, 0.5)
-            ax.cla()
-            plt.title("Power Spectral Density\n[dt: 2]")
-            ax.set_ylim([0.0, 200.0])
-            ax.set_xlabel("Frequency (Hz)")
-            ax.set_ylabel("Power (Decibels)")
-            for f in frequencies:
-                plt.axvspan(frequency_bands[f]["range"][0], frequency_bands[f]["range"][1], color=frequency_bands[f]["color"], alpha=0.1)
-            plt.plot(freqs, powers_avg, label='psd', c='b')
-            plt.plot(freqs, peaks['signals'], label='peaks', c='r')
-            psd_filepath = os.path.join(psd_filedir, f'frame_{eeg_current_start}.png')
-            plt.savefig(psd_filepath, bbox_inches="tight")
+    psd_frame_counter = 0
+    for eeg_current_end in frame_timestamps_list:
+        eeg_current_start = eeg_current_end - 1.0
+        psd_frame_counter += 1
+        ax.cla()
+        plt.title("Power Spectral Density\n[dt: 2]")
+        ax.set_ylim([0.0, 200.0])
+        ax.set_xlim([0.5, 80])
+        ax.set_xlabel("Frequency (Hz)")
+        ax.set_ylabel("Power Spectral Density (Db/Hz)")
+        for f in frequencies:
+            plt.axvspan(frequency_bands[f]["range"][0], frequency_bands[f]["range"][1], color=frequency_bands[f]["color"], alpha=0.1)
+
+        if eeg_current_start >= 0.0:
+            psd = mne_info.compute_psd(
+                tmin=eeg_current_start, 
+                tmax=eeg_current_end, 
+                average='mean', 
+                fmin=0.5,
+                fmax=60,
+                verbose=False)
+            powers, freqs = psd.get_data(picks=["AF7", "AF8"], return_freqs=True)
+            # Note: freqs is the same size as the 2D layer of `powers`. `powers`' first dimension is for each frequency channel
+            # To process, we need to look at the 2nd layer of `powers` when mapping frequencies to powers
+            peak_freqs = {}
+            peak_powers = {}
+            # frequencies = ["delta", "theta", "alpha", "beta", "gamma"]
+            for freq in frequencies:
+                peak_freqs[freq] = []
+                peak_powers[freq] = []
+            if len(powers) > 0:
+                # get through 1st layer of `powers`
+                powers_avg = np.mean(powers, axis=0)
+                peaks = thresholding_algo(powers_avg, 5, 3.5, 0.5)
+                plt.plot(freqs, powers_avg, label='psd', c='b')
+                plt.plot(freqs, peaks['signals'], label='peaks', c='r')
+
+        psd_filepath = os.path.join(psd_filedir, f'frame_{psd_frame_counter}.png')
+        plt.savefig(psd_filepath, bbox_inches="tight")
+
     print("Generating video from frames...")
     # Grab all frames in our temp folder. Sort them humanly.
     frames_raw = [img for img in os.listdir(psd_filedir) if img.endswith(".png")]
