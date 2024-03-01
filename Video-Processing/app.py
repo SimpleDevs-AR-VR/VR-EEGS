@@ -215,7 +215,7 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     frame_timestamps_list = frame_timestamps['timestamp'].to_list()
     psd_frame_counter = 0
     for eeg_current_end in frame_timestamps_list:
-        eeg_current_start = eeg_current_end - 2.0
+        eeg_current_start = eeg_current_end - 1.0
         psd_frame_counter += 1
         ax.cla()
         plt.title("Power Spectral Density\n[dt: 2]")
