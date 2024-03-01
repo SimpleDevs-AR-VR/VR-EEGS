@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import re
 import shutil
 import cv2
+from CreateEEGVideo import CreateEEGVideo
 
 from ExtractFrameTimestamps import ExtractTimestamps
 from EstimateEyeCursor import EstimateCursor
@@ -163,16 +164,40 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     === Step 7: Limit the EEG data range based on video start time ===
     ============================================================== """
     start_timestamp_sec = start_timestamp/1000
+    end_timestamp_sec = end_timestamp/1000
+    frame_timestamps = pd.read_csv(timestamps_path)
+    frame_timestamps_list = frame_timestamps['timestamp'].to_list()
+    trimmed_eeg_path, psd_videopath = CreateEEGVideo(
+        eeg_path,
+        {'ch1':'TP9','ch2':'AF7','ch3':'AF8','ch4':'TP10','ch5':'AUX'},
+        "unix_ts",
+        ["AF7","AF8","TP9","TP10"],
+        ["TP9","TP10"],
+        start_timestamp=start_timestamp_sec,
+        end_timestamp=end_timestamp_sec,
+        timestamps_list=frame_timestamps_list,
+        l_freq=0.5, 
+        h_freq=60, 
+        notch_freqs=[60],
+        display_xlims=[0.5,60],
+        fps=cursor_vid_details['fps'],
+        output_dir=os.path.join(root,"psd"),
+        verbose=True
+    )
+    """
+    start_timestamp_sec = start_timestamp/1000
     eeg_df = pd.read_csv(eeg_path)
     eeg_df.rename(columns={'ch1':'TP9', 'ch2':'AF7', 'ch3':'AF8', 'ch4':'TP10', 'ch5':'AUX'}, inplace=True)
     eeg_df = eeg_df.drop_duplicates()
     eeg_df = eeg_df[(eeg_df['unix_ts'] >= start_timestamp_sec) & (eeg_df['unix_ts'] <= (end_timestamp/1000))]
     eeg_df['unix_rel_ts'] = eeg_df['unix_ts'] - start_timestamp_sec
     eeg_df.to_csv(os.path.join(root,'eeg_trimmed.csv'), index=False)
-    
+    """
+
     """ =============================================
     === Step 8: Process EEG data into mne package ===
     ============================================= """
+    """
     eeg_start = eeg_df.iloc[0]['unix_ts']
     eeg_end = eeg_df.iloc[-1]['unix_ts']
     eeg_duration = eeg_end - eeg_start
@@ -186,6 +211,7 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     print('eeg_start: ' + str(eeg_start))
     print('eeg_end: ' + str(eeg_end))
     print('eeg_duration: ' + str(eeg_duration))
+    """
 
     """ ======================================
     === Step 9: Parsing EEG frame-by-frame ===
@@ -197,7 +223,7 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     We'll include samples from only AFTER the current timestamp. While having samples from both before and after the timestamp...
     ... might provide temporal context, we're more interested in the rapid changes in EEG signals. So the temporal context is not...
     ... going to be very useful. We'll still ahve the signal data on record for each frame anyway :shrug. """
-    
+    """
     fig, ax = plt.subplots(1,1,figsize=(10,4))
 
     psd_filedir = os.path.join(root, 'temp_psd_frames')
@@ -276,6 +302,9 @@ def ProcessFootage(root, camera, mappings, vr_events, eeg, camera_start_ms, objd
     shutil.rmtree(psd_filedir)
     print("Video finished generating!")
     plt.close()
+    """
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
