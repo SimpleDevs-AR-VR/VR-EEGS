@@ -67,6 +67,14 @@ _FREQUENCY_BANDS = {
     "gamma": {"range":(32, 80),"color":"red"}
 }
 
+def GetMeanAbsolutePower(powers, freqs, freq_bands, bands=["theta","alpha","beta","gamma"]):
+    # Get the mean absolute power of each frequency band, given the powers and frequencies of a Power Spectral Density
+    mean_abs_powers = {}
+    for band in bands:
+        freq_range = freq_bands[band]['range']
+        mean_abs_powers[band] = np.mean([powers[i] for i in range(len(freqs)) if freqs[i] >= freq_range[0] or freqs[i] <= freq_range[1]])
+    return mean_abs_powers
+
 def CreateEEGVideo(
         eeg_path, 
         eeg_column_dict,
@@ -168,29 +176,51 @@ def CreateEEGVideo(
     psd_filedir = os.path.join(output_dir, 'temp_psd_frames')
     if os.path.exists(psd_filedir): shutil.rmtree(psd_filedir)
     os.makedirs(psd_filedir)
-    
+    map_filedir = os.path.join(output_dir, 'temp_map_frames')
+    if os.path.exists(map_filedir): shutil.rmtree(map_filedir)
+    os.makedirs(map_filedir)
+
     if timestamps_list is None: timestamps_list = eeg_df['unix_rel_ts'].unique()
     current_frame_counter = 0
     for eeg_current_end in timestamps_list:
         eeg_current_start = eeg_current_end - 2.0
         current_frame_counter += 1
         
-        ax.cla()
-        plt.title("Power Spectral Density\n[dt: 2]")
-        ax.set_ylim(display_ylims)
-        ax.set_xlim(display_xlims)
-        ax.set_xlabel("Frequency (Hz)")
-        ax.set_ylabel("Power Spectral Density (Db/Hz)")
-        for f in _FREQUENCY_BANDS:
-            plt.axvspan(
-                _FREQUENCY_BANDS[f]["range"][0], 
-                _FREQUENCY_BANDS[f]["range"][1], 
-                color=_FREQUENCY_BANDS[f]["color"], 
-                alpha=0.1
-            )
+        if eeg_current_start < 0.0:
+            ax.cla()
+            plt.title("Power Spectral Density\n[dt: 2]")
+            ax.set_ylim(display_ylims)
+            ax.set_xlim(display_xlims)
+            ax.set_xlabel("Frequency (Hz)")
+            ax.set_ylabel("Power Spectral Density (Db/Hz)")
+            for f in _FREQUENCY_BANDS:
+                plt.axvspan(
+                    _FREQUENCY_BANDS[f]["range"][0], 
+                    _FREQUENCY_BANDS[f]["range"][1], 
+                    color=_FREQUENCY_BANDS[f]["color"], 
+                    alpha=0.1
+                )
+            psd_filepath = os.path.join(psd_filedir, f'frame_{current_frame_counter}.png')
+            plt.savefig(psd_filepath, bbox_inches="tight")
+            
+            ax.cla()
+            plt.title("Power Spectral Density: Mean Abs. Power\n[dt: 2]")
+            ax.set_ylim(display_ylims)
+            ax.set_xlim(display_xlims)
+            ax.set_xlabel("Frequency (Hz)")
+            ax.set_ylabel("Power Spectral Density: Mean Abs. Power (Db/Hz)")
+            for f in _FREQUENCY_BANDS:
+                plt.axvspan(
+                    _FREQUENCY_BANDS[f]["range"][0], 
+                    _FREQUENCY_BANDS[f]["range"][1], 
+                    color=_FREQUENCY_BANDS[f]["color"], 
+                    alpha=0.1
+                )
+            map_filepath = os.path.join(map_filedir, f'frame_{current_frame_counter}.png')
+            plt.savefig(psd_filepath, bbox_inches="tight")
+            continue
         
-        if eeg_current_start >= 0.0: 
-            psd = mne_info.compute_psd(
+        psd = mne_info.compute_psd(
                 tmin=eeg_current_start, 
                 tmax=eeg_current_end, 
                 average='mean', 
@@ -198,22 +228,39 @@ def CreateEEGVideo(
                 fmax=display_xlims[1],
                 verbose=False
                     )
-            powers, freqs = psd.get_data(picks=display_channels, return_freqs=True)
-            if current_frame_counter == 1 and verbose:
-                print(powers, freqs)
-            # Note: freqs is the same size as the 2D layer of `powers`. `powers`' first dimension is for each frequency channel
-            # To process, we need to look at the 2nd layer of `powers` when mapping frequencies to powers
-            peak_freqs = {}
-            peak_powers = {}
-            if len(powers) > 0:
-                # get through 1st layer of `powers`
-                powers_avg = np.mean(powers, axis=0)
-                #peaks = thresholding_algo(powers_avg, 5, 3.5, 0.5)
-                plt.plot(freqs, powers_avg, label='psd', c='b')
-                #plt.plot(freqs, peaks['signals'], label='peaks', c='r')
-        
+        powers, freqs = psd.get_data(picks=display_channels, return_freqs=True)
+        if current_frame_counter == 1 and verbose: print(powers, freqs)
+        # Note: freqs is the same size as the 2D layer of `powers`. `powers`' first dimension is for each frequency channel
+        # To process, we need to look at the 2nd layer of `powers` when mapping frequencies to powers
+        if len(powers) == 0:
+            ax.cla()
+            plt.title("Power Spectral Density\n[dt: 2]")
+            ax.set_ylim(display_ylims)
+            ax.set_xlim(display_xlims)
+            ax.set_xlabel("Frequency (Hz)")
+            ax.set_ylabel("Power Spectral Density (Db/Hz)")
+            for f in _FREQUENCY_BANDS:
+                plt.axvspan(
+                    _FREQUENCY_BANDS[f]["range"][0], 
+                    _FREQUENCY_BANDS[f]["range"][1], 
+                    color=_FREQUENCY_BANDS[f]["color"], 
+                    alpha=0.1
+                )
+            psd_filepath = os.path.join(psd_filedir, f'frame_{current_frame_counter}.png')
+            plt.savefig(psd_filepath, bbox_inches="tight")
+            continue
+
+        # get through 1st layer of `powers`
+        powers_avg = np.mean(powers, axis=0)
+        plt.plot(freqs, powers_avg, label='psd', c='b')
         psd_filepath = os.path.join(psd_filedir, f'frame_{current_frame_counter}.png')
         plt.savefig(psd_filepath, bbox_inches="tight")
+
+        #peaks = thresholding_algo(powers_avg, 5, 3.5, 0.5)
+        #plt.plot(freqs, peaks['signals'], label='peaks', c='r')
+        
+
+        
     
     if verbose: print("Generating video from frames...")
     # Grab all frames in our temp folder. Sort them humanly.
